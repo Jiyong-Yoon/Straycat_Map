@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>TNR 길고양이 지도 뷰어 (오버레이 사이드패널)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+  />
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    #controls {
+      padding: 8px 12px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      flex-wrap: wrap;
+      background: #fff;
+      z-index: 1000;
+    }
+
+    #controls label {
+      font-weight: 500;
+    }
+
+    #controls input[type="file"] {
+      font-size: 12px;
+    }
+
+    #controls input[type="date"],
+    #controls input[type="text"] {
+      padding: 4px 6px;
+      font-size: 13px;
+    }
+
+    #controls input[type="text"] {
+      min-width: 220px;
+    }
+
+    #controls button {
+      padding: 4px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #999;
+      background-color: #f5f5f5;
+    }
+
+    #controls button:hover {
+      background-color: #e0e0e0;
+    }
+
+    #status {
+      margin-left: auto;
+      font-size: 12px;
+      color: #555;
+    }
+
+    #main {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
+    #mapWrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    #sidePanel {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 380px;
+      background: rgba(255, 255, 255, 0.97);
+      border-right: 1px solid #ddd;
+      border-top: none;
+      border-left: none;
+      border-bottom: none;
+      border-radius: 0;
+      box-shadow: none;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      z-index: 1200;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+      transform: translateX(0);
+      opacity: 1;
+      backdrop-filter: blur(4px);
+    }
+
+    #sidePanel.collapsed {
+      transform: translateX(-100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #sidePanel.empty {
+      color: #777;
+    }
+
+    #sidePanelBody {
+      padding: 10px 12px;
+      overflow-y: auto;
+    }
+
+    #panelToggleBtn {
+      position: absolute;
+      top: 12px;
+      left: 392px;
+      z-index: 1300;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #999;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      transition: left 0.2s ease;
+    }
+
+    #panelToggleBtn.collapsed-pos {
+      left: 12px;
+    }
+
+    .leaflet-bottom.leaflet-right {
+      bottom: 12px;
+      right: 12px;
+    }
+
+    .marker-popup {
+      font-size: 13px;
+      line-height: 1.4;
+      width: 100%;
+      max-width: none;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    .marker-popup .title {
+      font-weight: 700;
+      margin-bottom: 8px;
+      font-size: 16px;
+      line-height: 1.35;
+    }
+
+    .marker-popup b {
+      font-weight: 700;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 16px;
+      row-gap: 4px;
+      margin-bottom: 4px;
+      font-size: 13px;
+      line-height: 1.35;
+      align-items: start;
+    }
+
+    .field-row .field {
+      margin-bottom: 0;
+      min-width: 0;
+    }
+
+    .cat-list {
+      max-height: 96px;
+      overflow-y: auto;
+      margin-bottom: 6px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 2px;
+      background-color: #fafafa;
+    }
+
+    .cat-list-item {
+      cursor: pointer;
+      padding: 3px 6px;
+      border-radius: 4px;
+      margin-bottom: 2px;
+      font-size: 11px;
+      line-height: 1.15;
+    }
+
+    .cat-list-item:hover {
+      background-color: #e6f2ff;
+    }
+
+    .cat-list-item.active {
+      background-color: #dceeff;
+      font-weight: 600;
+    }
+
+    .cat-list-item span {
+      margin-right: 3px;
+    }
+
+    .photo-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .photo-item {
+      width: 100%;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .photo-item img {
+      width: 100%;
+      height: auto;
+      border-radius: 6px;
+      object-fit: cover;
+      max-height: none;
+    }
+
+    .photo-label {
+      font-size: 11px;
+      margin-top: 2px;
+    }
+
+    .custom-cat-marker {
+      background: transparent;
+      border: none;
+    }
+
+    .empty-panel {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #666;
+    }
+
+    @media (max-width: 768px) {
+      #sidePanel {
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(86vw, 380px);
+        right: auto;
+      }
+
+      #panelToggleBtn {
+        left: calc(min(86vw, 380px) + 12px);
+      }
+
+      #panelToggleBtn.collapsed-pos {
+        left: 12px;
+      }
+
+      .field-row {
+        grid-template-columns: 1fr;
+        column-gap: 0;
+        row-gap: 2px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="controls">
+      <label for="csvFileInput">CSV 파일</label>
+      <input type="file" id="csvFileInput" accept=".csv" />
+
+      <label for="startDate">포획일자</label>
+      <input type="date" id="startDate" />
+      <span>~</span>
+      <input type="date" id="endDate" />
+
+      <label for="releasePlaceInput">방사장소</label>
+      <input
+        type="text"
+        id="releasePlaceInput"
+        placeholder="예: 논현동, 공원, 아파트"
+        autocomplete="off"
+      />
+
+      <button id="applyFilterBtn">적용</button>
+      <button id="clearReleasePlaceBtn" type="button">방사장소 초기화</button>
+      <button id="resetFilterBtn">전체 보기</button>
+      <button id="myLocationBtn" type="button">내 위치</button>
+
+      <div id="status">CSV 파일을 선택하세요.</div>
+    </div>
+
+    <div id="main">
+      <div id="mapWrap">
+        <button id="panelToggleBtn" type="button">접기</button>
+
+        <aside id="sidePanel" class="empty">
+          <div id="sidePanelBody">
+            <div class="empty-panel">지도에서 핀을 클릭하면 이곳에 정보가 표시됩니다.</div>
+          </div>
+        </aside>
+
+        <div id="map"></div>
+      </div>
+    </div>
+  </div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <script>
+    const COL_LAT = "lat";
+    const COL_LNG = "lng";
+    const COL_CAPTURE_DATE = "포획일자";
+    const COL_LOCATION = "포획장소";
+    const COL_RELEASE_LOCATION = "방사장소";
+    const COL_NOTE = "특이사항";
+    const COL_PHOTO_CAPTURE = "포획사진";
+    const COL_PHOTO_PRE = "중성화사진(수술전)";
+    const COL_PHOTO_RELEASE = "방사사진";
+    const COL_COLOR = "털색";
+    const COL_SEX = "성별";
+
+    let map;
+    let markerClusterGroup;
+    let allRows = [];
+    let filteredRows = [];
+    let csvLoaded = false;
+    let sidePanelCollapsed = false;
+    let myLocationMarker = null;
+    let myAccuracyCircle = null;
+
+    const csvFileInput = document.getElementById("csvFileInput");
+    const startDateInput = document.getElementById("startDate");
+    const endDateInput = document.getElementById("endDate");
+    const releasePlaceInput = document.getElementById("releasePlaceInput");
+    const applyFilterBtn = document.getElementById("applyFilterBtn");
+    const clearReleasePlaceBtn = document.getElementById("clearReleasePlaceBtn");
+    const resetFilterBtn = document.getElementById("resetFilterBtn");
+    const myLocationBtn = document.getElementById("myLocationBtn");
+    const statusDiv = document.getElementById("status");
+    const sidePanel = document.getElementById("sidePanel");
+    const sidePanelBody = document.getElementById("sidePanelBody");
+    const panelToggleBtn = document.getElementById("panelToggleBtn");
+
+    initMap();
+    updateSidePanelVisibility();
+
+    function initMap() {
+      map = L.map("map", {
+        zoomControl: false
+      }).setView([37.56, 126.97], 11);
+
+      L.control.zoom({
+        position: "bottomright"
+      }).addTo(map);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+
+      markerClusterGroup = L.markerClusterGroup({
+        spiderfyOnEveryZoom: false,
+        disableClusteringAtZoom: 18,
+        maxClusterRadius: 40,
+        iconCreateFunction: function (cluster) {
+          const markers = cluster.getAllChildMarkers();
+          let totalCats = 0;
+
+          markers.forEach((marker) => {
+            totalCats += marker.catCount || 1;
+          });
+
+          let size = "small";
+          if (totalCats > 50) size = "large";
+          else if (totalCats > 10) size = "medium";
+
+          return L.divIcon({
+            html: "<div><span>" + totalCats + "</span></div>",
+            className: "marker-cluster marker-cluster-" + size,
+            iconSize: L.point(40, 40)
+          });
+        }
+      });
+
+      map.addLayer(markerClusterGroup);
+    }
+
+    function updateSidePanelVisibility() {
+      if (sidePanelCollapsed) {
+        sidePanel.classList.add("collapsed");
+        panelToggleBtn.classList.add("collapsed-pos");
+        panelToggleBtn.textContent = "열기";
+      } else {
+        sidePanel.classList.remove("collapsed");
+        panelToggleBtn.classList.remove("collapsed-pos");
+        panelToggleBtn.textContent = "접기";
+      }
+    }
+
+    function openSidePanel() {
+      sidePanelCollapsed = false;
+      updateSidePanelVisibility();
+    }
+
+    function toggleSidePanel() {
+      sidePanelCollapsed = !sidePanelCollapsed;
+      updateSidePanelVisibility();
+    }
+
+    function showMyLocation() {
+      if (!navigator.geolocation) {
+        alert("이 브라우저는 위치 정보를 지원하지 않습니다.");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          const accuracy = position.coords.accuracy;
+
+          if (myLocationMarker) {
+            map.removeLayer(myLocationMarker);
+          }
+          if (myAccuracyCircle) {
+            map.removeLayer(myAccuracyCircle);
+          }
+
+          myLocationMarker = L.circleMarker([lat, lng], {
+            radius: 8,
+            color: "#ffffff",
+            weight: 2,
+            fillColor: "#2b7cff",
+            fillOpacity: 1
+          }).addTo(map);
+
+          myAccuracyCircle = L.circle([lat, lng], {
+            radius: accuracy,
+            color: "#2b7cff",
+            weight: 1,
+            fillColor: "#2b7cff",
+            fillOpacity: 0.12
+          }).addTo(map);
+
+          myLocationMarker.bindPopup("내 위치").openPopup();
+
+          map.setView([lat, lng], 16, {
+            animate: true
+          });
+
+          statusDiv.textContent = `내 위치 표시 완료 (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+        },
+        (error) => {
+          alert("위치 정보를 가져오지 못했습니다: " + error.message);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    csvFileInput.addEventListener("change", function (event) {
+      const file = event.target.files[0];
+      csvLoaded = false;
+      markerClusterGroup.clearLayers();
+      allRows = [];
+      filteredRows = [];
+      clearSidePanel();
+
+      if (!file) {
+        statusDiv.textContent = "CSV 파일을 선택하세요.";
+        return;
+      }
+
+      statusDiv.textContent = "CSV 파싱 중...";
+
+      Papa.parse(file, {
+        header: true,
+        dynamicTyping: false,
+        skipEmptyLines: true,
+        complete: function (results) {
+          if (!results || !results.data) {
+            statusDiv.textContent = "CSV 파싱 실패 (data 없음)";
+            return;
+          }
+
+          allRows = results.data.filter((row) => row[COL_LAT] && row[COL_LNG]);
+
+          if (!allRows.length) {
+            statusDiv.textContent = "유효한 좌표 데이터가 없습니다.";
+            return;
+          }
+
+          csvLoaded = true;
+
+          const { minDateStr, maxDateStr } = getDateRangeFromRows(allRows);
+          if (minDateStr && maxDateStr) {
+            startDateInput.value = minDateStr;
+            endDateInput.value = maxDateStr;
+          } else {
+            startDateInput.value = "";
+            endDateInput.value = "";
+          }
+
+          applyFilter(true);
+          statusDiv.textContent = "로드 완료: " + allRows.length + "건";
+        },
+        error: function (err) {
+          console.error(err);
+          statusDiv.textContent = "CSV 파싱 중 오류 발생";
+        }
+      });
+    });
+
+    function clearSidePanel() {
+      sidePanel.classList.add("empty");
+      sidePanelBody.innerHTML = `<div class="empty-panel">지도에서 핀을 클릭하면 이곳에 정보가 표시됩니다.</div>`;
+    }
+
+    function setSidePanelHtml(html, rows = null) {
+      sidePanel.classList.remove("empty");
+      sidePanelBody.innerHTML = html;
+      attachPhotoClickHandlers(sidePanelBody);
+
+      const listItems = sidePanelBody.querySelectorAll(".cat-list-item");
+      listItems.forEach((item) => {
+        item.addEventListener("click", function () {
+          if (!rows) return;
+          const index = parseInt(this.getAttribute("data-index"), 10);
+          listItems.forEach(el => el.classList.remove("active"));
+          this.classList.add("active");
+
+          const cat = rows[index];
+          const detailDiv = sidePanelBody.querySelector(".cat-detail-container");
+          if (detailDiv && cat) {
+            detailDiv.innerHTML = buildCatDetailHtml(cat);
+            attachPhotoClickHandlers(detailDiv);
+          }
+        });
+      });
+    }
+
+    function getDateRangeFromRows(rows) {
+      let minDate = null;
+      let maxDate = null;
+
+      rows.forEach((row) => {
+        const dStr = normalizeDateStr(row[COL_CAPTURE_DATE]);
+        if (!dStr) return;
+        const d = new Date(dStr);
+        if (isNaN(d)) return;
+        if (!minDate || d < minDate) minDate = d;
+        if (!maxDate || d > maxDate) maxDate = d;
+      });
+
+      return {
+        minDateStr: minDate ? toInputDateValue(minDate) : "",
+        maxDateStr: maxDate ? toInputDateValue(maxDate) : ""
+      };
+    }
+
+    function normalizeDateStr(str) {
+      if (!str) return null;
+      let s = String(str).trim();
+      if (!s) return null;
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+      s = s.replace(/[./]/g, "-");
+      const parts = s.split("-");
+      if (parts.length === 3) {
+        let [y, m, d] = parts;
+        if (m.length === 1) m = "0" + m;
+        if (d.length === 1) d = "0" + d;
+        if (/^\d{4}$/.test(y) && /^\d{2}$/.test(m) && /^\d{2}$/.test(d)) {
+          return `${y}-${m}-${d}`;
+        }
+      }
+
+      const tmp = new Date(str);
+      if (isNaN(tmp)) return null;
+      return toInputDateValue(tmp);
+    }
+
+    function toInputDateValue(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+
+    function applyFilter(isInitial = false) {
+      if (!csvLoaded || !allRows.length) {
+        statusDiv.textContent = "CSV 파일을 먼저 선택하세요.";
+        return;
+      }
+
+      const startStr = startDateInput.value;
+      const endStr = endDateInput.value;
+      const releaseKeyword = (releasePlaceInput.value || "").trim().toLowerCase();
+
+      let startTime = null;
+      let endTime = null;
+
+      if (startStr) startTime = new Date(startStr).getTime();
+      if (endStr) {
+        const d = new Date(endStr);
+        d.setHours(23, 59, 59, 999);
+        endTime = d.getTime();
+      }
+
+      filteredRows = allRows.filter((row) => {
+        const dStr = normalizeDateStr(row[COL_CAPTURE_DATE]);
+        if (!dStr) return false;
+        const t = new Date(dStr).getTime();
+        if (isNaN(t)) return false;
+
+        if (startTime !== null && t < startTime) return false;
+        if (endTime !== null && t > endTime) return false;
+
+        const releaseLocation = String(row[COL_RELEASE_LOCATION] || "").toLowerCase();
+        if (releaseKeyword && !releaseLocation.includes(releaseKeyword)) return false;
+
+        return true;
+      });
+
+      updateMarkers();
+      clearSidePanel();
+
+      statusDiv.textContent =
+        `표시 중: ${filteredRows.length}건` +
+        (releaseKeyword ? ` | 방사장소: ${releasePlaceInput.value}` : "") +
+        (isInitial ? " (초기 전체 범위)" : "");
+    }
+
+    function resetFilter() {
+      if (!csvLoaded || !allRows.length) {
+        statusDiv.textContent = "CSV 파일을 먼저 선택하세요.";
+        return;
+      }
+
+      startDateInput.value = "";
+      endDateInput.value = "";
+      releasePlaceInput.value = "";
+      filteredRows = allRows.slice();
+      updateMarkers();
+      clearSidePanel();
+      statusDiv.textContent = `표시 중: ${filteredRows.length}건 (필터 없음)`;
+    }
+
+    function updateMarkers() {
+      markerClusterGroup.clearLayers();
+      const bounds = [];
+      const groups = new Map();
+
+      filteredRows.forEach((row) => {
+        const lat = parseFloat(row[COL_LAT]);
+        const lng = parseFloat(row[COL_LNG]);
+        if (isNaN(lat) || isNaN(lng)) return;
+
+        const key = lat.toFixed(4) + "," + lng.toFixed(4);
+        if (!groups.has(key)) {
+          groups.set(key, []);
+        }
+        groups.get(key).push(row);
+      });
+
+      for (const [key, rows] of groups.entries()) {
+        const [latStr, lngStr] = key.split(",");
+        const lat = parseFloat(latStr);
+        const lng = parseFloat(lngStr);
+        if (isNaN(lat) || isNaN(lng)) continue;
+
+        const count = rows.length;
+
+        const iconHtml = `
+          <div style="
+            position: relative;
+            width: 18px;
+            height: 18px;
+            background: #000000;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 1px solid #333333;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+          ">
+            <span style="
+              position: absolute;
+              inset: 0;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: #ffffff;
+              font-size: 8px;
+              font-weight: bold;
+              transform: rotate(45deg);
+              line-height: 1;
+            ">${count}</span>
+          </div>
+        `;
+
+        const customIcon = L.divIcon({
+          className: "custom-cat-marker",
+          html: iconHtml,
+          iconSize: [18, 18],
+          iconAnchor: [9, 18]
+        });
+
+        const marker = L.marker([lat, lng], { icon: customIcon });
+        marker.catCount = rows.length;
+
+        marker.on("click", function () {
+          map.panTo([lat, lng], { animate: true });
+          if (sidePanelCollapsed) openSidePanel();
+          setSidePanelHtml(buildSidePanelHtml(rows), rows);
+        });
+
+        markerClusterGroup.addLayer(marker);
+        bounds.push([lat, lng]);
+      }
+
+      if (bounds.length > 0) {
+        const b = L.latLngBounds(bounds);
+        map.fitBounds(b, { maxZoom: 16 });
+      }
+    }
+
+    function buildSidePanelHtml(rows) {
+      if (!rows || !rows.length) return "<div>데이터 없음</div>";
+
+      const first = rows[0];
+
+      if (rows.length === 1) {
+        return `<div class="marker-popup">${buildCatDetailHtml(first)}</div>`;
+      }
+
+      let listHtml = `<div class="cat-list">`;
+      rows.forEach((cat, idx) => {
+        const date = normalizeDateStr(cat[COL_CAPTURE_DATE]) || "";
+        const color = cat[COL_COLOR] || "";
+        const sex = cat[COL_SEX] || "";
+        listHtml +=
+          `<div class="cat-list-item ${idx === 0 ? "active" : ""}" data-index="${idx}">` +
+          `<span>[${idx + 1}]</span>` +
+          `<span>${escapeHtml(date)}</span>` +
+          (color ? `<span>${escapeHtml(color)}</span>` : "") +
+          (sex ? `<span>${escapeHtml(sex)}</span>` : "") +
+          `</div>`;
+      });
+      listHtml += `</div>`;
+
+      const detailHtml = buildCatDetailHtml(first);
+
+      return (
+        `<div class="marker-popup">` +
+        listHtml +
+        `<div class="cat-detail-container">${detailHtml}</div>` +
+        `</div>`
+      );
+    }
+
+    function buildCatDetailHtml(cat) {
+      const captureDate = normalizeDateStr(cat[COL_CAPTURE_DATE]) || "";
+      const location = cat[COL_LOCATION] || "";
+      const note = cat[COL_NOTE] || "";
+      const photoCapture = cat[COL_PHOTO_CAPTURE] || "";
+      const photoPre = cat[COL_PHOTO_PRE] || "";
+      const photoRelease = cat[COL_PHOTO_RELEASE] || "";
+      const color = cat[COL_COLOR] || "";
+      const sex = cat[COL_SEX] || "";
+
+      let html = "";
+
+      html += `<div class="title">${escapeHtml(location)}</div>`;
+
+      html += `<div class="field-row">`;
+      html += `<div class="field"><b>포획일자</b>: ${escapeHtml(captureDate)}</div>`;
+      html += `<div class="field"><b>털 색</b>: ${escapeHtml(color)}</div>`;
+      html += `</div>`;
+
+      html += `<div class="field-row">`;
+      html += `<div class="field"><b>성별</b>: ${escapeHtml(sex)}</div>`;
+      html += `<div class="field"><b>특이사항</b>: ${escapeHtml(note || "없음")}</div>`;
+      html += `</div>`;
+
+      const photos = [];
+      if (photoCapture) photos.push({ url: photoCapture, label: "포획" });
+      if (photoPre) photos.push({ url: photoPre, label: "수술전" });
+      if (photoRelease) photos.push({ url: photoRelease, label: "방사" });
+
+      if (photos.length > 0) {
+        html += `<div class="photo-row">`;
+        photos.forEach((p) => {
+          html +=
+            `<div class="photo-item" data-photo-url="${escapeHtmlAttr(p.url)}">` +
+            `<img src="${escapeHtmlAttr(p.url)}" alt="${escapeHtmlAttr(p.label)} 사진" />` +
+            `<div class="photo-label">${escapeHtml(p.label)}</div>` +
+            `</div>`;
+        });
+        html += `</div>`;
+      }
+
+      return html;
+    }
+
+    function attachPhotoClickHandlers(container) {
+      const photoItems = container.querySelectorAll(".photo-item");
+      photoItems.forEach((item) => {
+        item.onclick = () => {
+          const url = item.getAttribute("data-photo-url");
+          if (!url) return;
+          window.open(url, "_blank");
+        };
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function escapeHtmlAttr(str) {
+      return escapeHtml(str);
+    }
+
+    panelToggleBtn.addEventListener("click", toggleSidePanel);
+    myLocationBtn.addEventListener("click", showMyLocation);
+
+    clearReleasePlaceBtn.addEventListener("click", () => {
+      releasePlaceInput.value = "";
+      if (csvLoaded) applyFilter(false);
+    });
+
+    releasePlaceInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        applyFilter(false);
+      }
+    });
+
+    applyFilterBtn.addEventListener("click", () => applyFilter(false));
+    resetFilterBtn.addEventListener("click", resetFilter);
+  </script>
+</body>
+</html>
